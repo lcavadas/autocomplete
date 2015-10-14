@@ -3,7 +3,6 @@
  * jQuery Plugin for Autocomplete
  *
  * @author Luis Serralheiro
- * @requires jQuery and acdvorak/jquery.caret
  */
 (function ($) {
   $.fn.autocomplete = function (options) {

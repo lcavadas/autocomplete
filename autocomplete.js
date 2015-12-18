@@ -252,6 +252,10 @@
     return {
       close: function () {
         _$display.hide();
+      },
+      destroy: function () {
+        _$display.remove();
+        _$this.unbind(['keyup', 'keydown', 'drop', 'paste', 'click', 'focus', 'focusout']);
       }
     };
 

@@ -95,7 +95,7 @@
       } else {
         var matchingValues = [];
         values.forEach(function (value) {
-          if (value.toLowerCase().indexOf(filterText) >= 0) {
+          if (value && value.toLowerCase().indexOf(filterText) >= 0) {
             matchingValues.push(value);
           }
         });

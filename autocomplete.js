@@ -213,23 +213,22 @@
       }
     };
 
-    _$this.bind('focus', function () {
+    var _onFocus = function () {
       window.setTimeout(function () {
         _$display.show();
         _$this.trigger('keyup', {keyCode: 20});
       }, 100);
-    });
+    };
 
-    _$this.bind('focusout', function () {
+    var _onFocusOut = function () {
       if (clickedInside) {
         _$this.focus();
       } else {
         _$display.hide();
       }
-    });
+    };
 
-    _$this.bind(['keyup', 'drop', 'paste', 'click'].join(' '), _handler);
-    _$this.bind('keydown', function (e) {
+    var _onKeyDown = function (e) {
       if (e.keyCode === 9) {//tab
         e.preventDefault();
       } else if (e.keyCode === 40) {//down
@@ -247,7 +246,12 @@
         _selected -= 10;
         _updateSelection(--_selected);
       }
-    });
+    };
+
+    _$this.bind('focus', _onFocus);
+    _$this.bind('focusout', _onFocusOut);
+    _$this.bind(['keyup', 'drop', 'paste', 'click'].join(' '), _handler);
+    _$this.bind('keydown', _onKeyDown);
 
     return {
       close: function () {
@@ -255,7 +259,10 @@
       },
       destroy: function () {
         _$display.remove();
-        _$this.unbind(['keyup', 'keydown', 'drop', 'paste', 'click', 'focus', 'focusout']);
+        _$this.bind('focus', _onFocus);
+        _$this.bind('focusout', _onFocusOut);
+        _$this.bind(['keyup', 'drop', 'paste', 'click'].join(' '), _handler);
+        _$this.bind('keydown', _onKeyDown);
       }
     };
 

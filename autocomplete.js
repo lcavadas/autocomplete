@@ -3,6 +3,7 @@
  * jQuery Plugin for Autocomplete
  *
  * @author Luis Serralheiro
+ * @requires jQuery and acdvorak/jquery.caret
  */
 (function ($) {
   $.fn.autocomplete = function (options) {
@@ -15,7 +16,7 @@
 
     var settings = $.extend({
       collection: 'languages',
-      separator: 'and',
+      separators: ['and'],
       offset: {
         y: 36,
         x: 6
@@ -120,11 +121,11 @@
     var _handler = function (e) {
       var searchText = _$this.val().substr(0, _$this.caret());
       var text;
-      if (settings.separator) {
+      if (settings.separators) {
         var words = searchText.match(_wordRegex) || [];
         var split = [];
         words.forEach(function (word) {
-          if (word.trim() === settings.separator) {
+          if (settings.separators.indexOf(word.trim()) !== -1) {
             split = [];
           } else {
             split.push(word);
@@ -155,7 +156,7 @@
           if (valueIdx !== _idx) {
             _idx = valueIdx;
           }
-          _$display.css('left', (_$tester.html(_$this.val().substr(0, _$this.caret())).outerWidth() + settings.offset.x) + 'px');
+          _$display.css('left', Math.min(_$tester.html(_$this.val().substr(0, _$this.caret())).outerWidth() + settings.offset.x, _$this.width() - _$display.width()) + 'px');
           _filter(match, text);
         }
         settings.handler(e);
@@ -165,11 +166,11 @@
     function getValuesForText() {
       var searchText = _$this.val().substr(0, _$this.caret());
       var text_;
-      if (settings.separator) {
+      if (settings.separators) {
         var words = searchText.match(_wordRegex) || [];
         var split = [];
         words.forEach(function (word) {
-          if (word.trim() === settings.separator) {
+          if (settings.separators.indexOf(word.trim()) !== -1) {
             split = [];
           } else {
             split.push(word);
@@ -207,28 +208,31 @@
       }
       var newText = completeText.substr(0, positionStart - text.length) + insertText + completeText.substr(positionEnd, completeText.length - positionEnd);
       if (settings.select(_idx, selectedText)) {
+        _$this.focus();
         _$this.val(newText);
         _$this.caret(positionEnd > positionStart ? positionEnd : positionStart + insertText.length);
         _$this.trigger('keyup', {keyCode: 20});
+        _$this.scrollLeft(_$this[0].scrollWidth);
       }
     };
 
-    var _onFocus = function () {
+    _$this.bind('focus', function () {
       window.setTimeout(function () {
         _$display.show();
         _$this.trigger('keyup', {keyCode: 20});
       }, 100);
-    };
+    });
 
-    var _onFocusOut = function () {
+    _$this.bind('focusout', function () {
       if (clickedInside) {
         _$this.focus();
       } else {
         _$display.hide();
       }
-    };
+    });
 
-    var _onKeyDown = function (e) {
+    _$this.bind(['keyup', 'drop', 'paste', 'click'].join(' '), _handler);
+    _$this.bind('keydown', function (e) {
       if (e.keyCode === 9) {//tab
         e.preventDefault();
       } else if (e.keyCode === 40) {//down
@@ -246,12 +250,7 @@
         _selected -= 10;
         _updateSelection(--_selected);
       }
-    };
-
-    _$this.bind('focus', _onFocus);
-    _$this.bind('focusout', _onFocusOut);
-    _$this.bind(['keyup', 'drop', 'paste', 'click'].join(' '), _handler);
-    _$this.bind('keydown', _onKeyDown);
+    });
 
     return {
       close: function () {
@@ -259,10 +258,7 @@
       },
       destroy: function () {
         _$display.remove();
-        _$this.bind('focus', _onFocus);
-        _$this.bind('focusout', _onFocusOut);
-        _$this.bind(['keyup', 'drop', 'paste', 'click'].join(' '), _handler);
-        _$this.bind('keydown', _onKeyDown);
+        _$this.unbind(['keyup', 'keydown', 'drop', 'paste', 'click', 'focus', 'focusout']);
       }
     };
 

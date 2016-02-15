@@ -10,9 +10,9 @@
 
     var _$this = $(this);
     var _wordRegex = /((?!\\)."|^").*?((?!\\)."|$)|[^\s]+/gi;
-    var _idx;
     var _selected;
     var clickedInside = true;
+    var _values;
 
     var settings = $.extend({
       collection: 'languages',
@@ -60,7 +60,7 @@
     _$display.after(_$tester);
     _$display.append(_$options);
 
-    $(document.body).bind('mousedown', function (e) {
+    $(document.body).bind('mousedown', function () {
       clickedInside = false;
     });
 
@@ -94,31 +94,45 @@
       if (!values.length) {
         _$display.hide();
       } else {
-        var matchingValues = [];
+        _values = [];
         values.forEach(function (value) {
-          if (value && value.toLowerCase().indexOf(filterText) >= 0) {
-            matchingValues.push(value);
+          if (value.value.toLowerCase().indexOf(filterText) >= 0) {
+            _values.push(value);
           }
         });
-        if (matchingValues.length > 200) {
-          matchingValues = values.slice(0, 200);
+        if (_values.length > 200) {
+          _values = values.slice(0, 200);
         }
-        matchingValues.forEach(function (value, idx) {
+        _values.forEach(function (value, idx) {
           var $li = $('<li style="padding: .2em .5em;cursor:pointer;"></li>');
+          if (value.selected) {
+            $li.addClass('selected');
+            _selected = idx;
+          }
           $li.bind('mousedown click', function (e) {
             e.stopPropagation();
             e.preventDefault();
             _selected = idx;
-            _performSelection(text);
+            _performSelection(value, text);
           });
-          _$options.append($li.html(value));
+          _$options.append($li.html(value.text));
         });
         _$display.show();
         _updateSelection();
       }
     };
 
-    var _handler = function (e) {
+    var _findValue = function (text) {
+      var value;
+      _values.forEach(function (val) {
+        if (val.text === text) {
+          value = val;
+        }
+      });
+      return value;
+    };
+
+    var _getCurrent = function () {
       var searchText = _$this.val().substr(0, _$this.caret());
       var text;
       if (settings.separators) {
@@ -142,72 +156,64 @@
         match = [''];
       }
 
-      var quotes = text.match(/((?!\\).{1}"|^")./g) || [];
+      var quotes = text.match(/((?!\\)."|^")./g) || [];
       var wordEnd = text.match(/ $/i);
       var valueIdx = (match.length - 1 + (wordEnd ? (quotes.length % 2 === 0 ? 1 : 0) : 0)) % settings.values.length;
-      text = match.length > valueIdx ? match[valueIdx].trim() : '';
+      return {match: match, text: match.length > valueIdx ? match[valueIdx].trim() : '', idx: valueIdx};
+    };
 
+    var _handler = function (e) {
+      var current = _getCurrent();
       if (e.keyCode === 13 || e.keyCode === 9) {//enter or tab
-        _performSelection(text);
+        _performSelection(_findValue(_$options.find('.selected').text()), current.text);
       } else if (e.keyCode === 27) {//escape
         settings.handler(e);
       } else if (e.keyCode !== 40 && e.keyCode !== 38 && e.keyCode !== 33 && e.keyCode !== 34) {//up, down, page up and page down
         if (!_$this.range().length) {
-          if (valueIdx !== _idx) {
-            _idx = valueIdx;
-          }
           _$display.css('left', Math.min(_$tester.html(_$this.val().substr(0, _$this.caret())).outerWidth() + settings.offset.x, _$this.width() - _$display.width()) + 'px');
-          _filter(match, text);
+          _filter(current.match, current.text);
         }
         settings.handler(e);
       }
     };
 
     function getValuesForText() {
-      var searchText = _$this.val().substr(0, _$this.caret());
-      var text_;
-      if (settings.separators) {
-        var words = searchText.match(_wordRegex) || [];
-        var split = [];
-        words.forEach(function (word) {
-          if (settings.separators.indexOf(word.trim()) !== -1) {
-            split = [];
-          } else {
-            split.push(word);
-          }
-        });
-        text_ = split.join(" ");
-        if (split.length && searchText[searchText.length - 1] === ' ') {
-          text_ = text_ + ' ';
+      var current = _getCurrent();
+      var values = typeof settings.values[current.idx] === 'function' ? settings.values[current.idx](current.match) : settings.values[current.idx];
+      var options = [];
+      values.forEach(function (val) {
+        if (typeof val === 'object') {
+          options.push(val);
+        } else {
+          options.push({text: val, value: val});
         }
-      }
-
-      var match = text_.match(_wordRegex);
-      if (!match) {
-        match = [''];
-      }
-      var values = typeof settings.values[_idx] === 'function' ? settings.values[_idx](match) : settings.values[_idx];
-      return values;
+      });
+      return options;
     }
 
-    var _performSelection = function (text) {
-      var selectedText = $(_$options.find('li').get(_selected)).text();
+    var _performSelection = function (value) {
+      var current = _getCurrent();
+
+      var selectedText = value.value;
       if (!selectedText) {
         return;
       }
       var positionStart = _$this.caret();
       var completeText = _$this.val();
       var insertText = (selectedText.indexOf(' ') !== -1 && selectedText.indexOf('"') === -1 ? '"' + selectedText + '"' : selectedText) + ' ';
+      if (value.partial) {
+        insertText = insertText.substr(0, insertText.length - 1);
+      }
       var positionEnd = completeText.length;
       if (positionStart !== positionEnd) {
-        if (insertText[0] === '"') {
+        if (current.text[0] === '"') {
           positionEnd = completeText.indexOf('"', positionStart) + 2;
         } else {
           positionEnd = completeText.indexOf(' ', positionStart) + 1;
         }
       }
-      var newText = completeText.substr(0, positionStart - text.length) + insertText + completeText.substr(positionEnd, completeText.length - positionEnd);
-      if (settings.select(_idx, selectedText)) {
+      var newText = completeText.substr(0, positionStart - current.text.length) + insertText + completeText.substr(positionEnd, completeText.length - positionEnd);
+      if (settings.select(current.idx, selectedText)) {
         _$this.focus();
         _$this.val(newText);
         _$this.caret(positionEnd > positionStart ? positionEnd : positionStart + insertText.length);

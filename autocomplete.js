@@ -49,7 +49,7 @@
 
     $("<style type='text/css'>.autocomplete .selected{ background-color:#036; color:white;} </style>").appendTo("head");
     var _$options = $('<ol style="list-style: none; padding: .5em; margin: 0;"></ol>');
-    var _$display = $('<div class="autocomplete" style="z-index:9999999;display:none;position:absolute; background-color: white;border: 1px solid #999;top:' + settings.offset.y + 'px;left:' + settings.offset.x + 'px; max-height: 40%; overflow-y: auto;overflow-x: none;"></div>');
+    var _$display = $('<div class="autocomplete" style="z-index:9999999;display:none;position:absolute; background-color: white;border: 1px solid #999;top:' + settings.offset.y + 'px;left:' + settings.offset.x + 'px; max-height: 40%; overflow-y: auto;overflow-x: hidden;"></div>');
     var _$tester = $('<span style="display: none; position: absolute;margin:0;"></span>');
     _$tester.css('font-weight', _$this.css('font-weight'));
     _$tester.css('font-size', _$this.css('font-size'));
@@ -117,7 +117,17 @@
           });
           _$options.append($li.html(value.text));
         });
-        _$display.show();
+
+        // chrome does not handle scrolls correctly for strings smaller than 4 chars
+        if(navigator.userAgent.toLowerCase().indexOf('chrome') > -1){
+          if(_$options.height() > _$display.height()){
+            _$display.css('overflow-y', 'scroll');
+          } else {
+            _$display.css('overflow-y', 'auto');
+          }
+        }
+
+          _$display.show();
         _updateSelection();
       }
     };

@@ -9,14 +9,19 @@
   $.fn.autocomplete = function (options) {
 
     var _$this = $(this);
+    if (_$this.attr("contenteditable")) {
+      _$this.val = _$this.text;
+    }
     var _wordRegex = /((?!\\)."|^").*?((?!\\)."|$)|[^\s]+/gi;
     var _selected;
     var clickedInside = true;
-    var _values;
+    var _values = [];
+    var _pos;
 
     var settings = $.extend({
       collection: 'languages',
       separators: ['and'],
+      inverse: false,
       offset: {
         y: 36,
         x: 6
@@ -49,7 +54,7 @@
 
     $("<style type='text/css'>.autocomplete .selected{ background-color:#036; color:white;} </style>").appendTo("head");
     var _$options = $('<ol style="list-style: none; padding: .5em; margin: 0;"></ol>');
-    var _$display = $('<div class="autocomplete" style="z-index:9999999;display:none;position:absolute; background-color: white;border: 1px solid #999;top:' + settings.offset.y + 'px;left:' + settings.offset.x + 'px; max-height: 40%; overflow-y: auto;overflow-x: hidden;"></div>');
+    var _$display = $('<div class="autocomplete" style="z-index:9999999;display:none;position:absolute; border-radius: 5px; background-color: white;border: 1px solid #999;' + (settings.inverse ? 'bottom' : 'top') + ':' + settings.offset.y + 'px;left:' + settings.offset.x + 'px; max-height: 40vh; overflow-y: auto;overflow-x: hidden;"></div>');
     var _$tester = $('<span style="display: none; position: absolute;margin:0;"></span>');
     _$tester.css('font-weight', _$this.css('font-weight'));
     _$tester.css('font-size', _$this.css('font-size'));
@@ -89,57 +94,49 @@
     var _filter = function (match, text) {
       var filterText = (text[0] === '"' ? text.substr(1, text.length - 1) : text).toLowerCase();
       _selected = 0;
-      _$options.html('');
-      var values = getValuesForText();
-      if (!values.length) {
-        _$display.hide();
-      } else {
-        _values = [];
-        values.forEach(function (value) {
-          if (value.value.toLowerCase().indexOf(filterText) >= 0) {
-            _values.push(value);
-          }
-        });
-        if (_values.length > 200) {
-          _values = values.slice(0, 200);
-        }
-        _values.forEach(function (value, idx) {
-          var $li = $('<li style="padding: .2em .5em;cursor:pointer;"></li>');
-          if (value.selected) {
-            $li.addClass('selected');
-            _selected = idx;
-          }
-          $li.bind('mousedown click', function (e) {
-            e.stopPropagation();
-            e.preventDefault();
-            _selected = idx;
-            _performSelection(value, text);
+      _$options.html('<span class="load-message" style="color: #666;">Loading values</span>');
+      _getValuesForText(function (values) {
+        _$options.html('');
+        if (!values.length) {
+          _$display.hide();
+        } else {
+          _values = [];
+          values.forEach(function (value) {
+            if ((value.value + '').toLowerCase().indexOf(filterText) >= 0) {
+              _values.push(value);
+            }
           });
-          _$options.append($li.html(value.text));
-        });
-
-        // chrome does not handle scrolls correctly for strings smaller than 4 chars
-        if(navigator.userAgent.toLowerCase().indexOf('chrome') > -1){
-          if(_$options.height() > _$display.height()){
-            _$display.css('overflow-y', 'scroll');
-          } else {
-            _$display.css('overflow-y', 'auto');
+          if (_values.length > 200) {
+            _values = values.slice(0, 200);
           }
-        }
+          _values.forEach(function (value, idx) {
+            var $li = $('<li style="padding: .2em .5em;cursor:pointer;" value="' + value.value + '"></li>');
+            if (value.selected) {
+              $li.addClass('selected');
+              _selected = idx;
+            }
+            $li.bind('mousedown click', function (e) {
+              e.stopPropagation();
+              e.preventDefault();
+              _selected = idx;
+              _performSelection(value, text);
+            });
+            _$options.append($li.html(value.text));
+          });
+
+          // chrome does not handle scrolls correctly for strings smaller than 4 chars
+          if (navigator.userAgent.toLowerCase().indexOf('chrome') > -1) {
+            if (_$options.height() > _$display.height()) {
+              _$display.css('overflow-y', 'scroll');
+            } else {
+              _$display.css('overflow-y', 'auto');
+            }
+          }
 
           _$display.show();
-        _updateSelection();
-      }
-    };
-
-    var _findValue = function (text) {
-      var value;
-      _values.forEach(function (val) {
-        if (val.text === text) {
-          value = val;
+          _updateSelection();
         }
       });
-      return value;
     };
 
     var _getCurrent = function () {
@@ -159,11 +156,18 @@
         if (split.length && searchText[searchText.length - 1] === ' ') {
           text = text + ' ';
         }
+      } else {
+        text = searchText.match(_wordRegex);
+        text = text ? text[text.length - 1] : "";
       }
 
       var match = text.match(_wordRegex);
       if (!match) {
         match = [''];
+      } else {
+        match.forEach(function (term, idx) {
+          match[idx] = term.trim().replace(/^"(.*)"$/, '$1');
+        });
       }
 
       var quotes = text.match(/((?!\\)."|^")./g) || [];
@@ -174,22 +178,23 @@
 
     var _handler = function (e) {
       var current = _getCurrent();
-      if (e.keyCode === 13 || e.keyCode === 9) {//enter or tab
-        _performSelection(_findValue(_$options.find('.selected').text()), current.text);
+      if (e.keyCode === 13) {//enter
+        var value = _values[_selected];
+        _performSelection(value, current.text);
+        settings.handler(e, value);
       } else if (e.keyCode === 27) {//escape
         settings.handler(e);
-      } else if (e.keyCode !== 40 && e.keyCode !== 38 && e.keyCode !== 33 && e.keyCode !== 34) {//up, down, page up and page down
-        if (!_$this.range().length) {
-          _$display.css('left', Math.min(_$tester.html(_$this.val().substr(0, _$this.caret())).outerWidth() + settings.offset.x, _$this.width() - _$display.width()) + 'px');
-          _filter(current.match, current.text);
-        }
+      } else if (e.type === 'keyup' && e.keyCode !== 40 && e.keyCode !== 38 && e.keyCode !== 33 && e.keyCode !== 34) {//up, down, page up and page down
+        _$display.css('left', Math.min(_$tester.html(_$this.val().substr(0, _$this.caret())).width() + settings.offset.x, _$this.width() - _$display.width()) + 'px');
+        _filter(current.match, current.text);
+        settings.handler(e);
+      } else if (_pos !== _$this.caret()) {
+        _filter(current.match, current.text);
         settings.handler(e);
       }
     };
 
-    function getValuesForText() {
-      var current = _getCurrent();
-      var values = typeof settings.values[current.idx] === 'function' ? settings.values[current.idx](current.match) : settings.values[current.idx];
+    var _processValues = function (values) {
       var options = [];
       values.forEach(function (val) {
         if (typeof val === 'object') {
@@ -199,20 +204,37 @@
         }
       });
       return options;
-    }
+    };
+
+    var _getValuesForText = function (cb) {
+      var current = _getCurrent();
+      if (typeof settings.values[current.idx] === 'function') {
+        settings.values[current.idx](current.match, _$this.val().substr(0, _$this.caret()),
+          function (values) {
+            cb(_processValues(values));
+          }
+        );
+      } else {
+        cb(_processValues(settings.values[current.idx]));
+      }
+    };
 
     var _performSelection = function (value) {
       var current = _getCurrent();
 
-      var selectedText = value.value;
-      if (!selectedText) {
+      if (!value || !value.value) {
         return;
       }
+
+      var selectedText = value.value;
       var positionStart = _$this.caret();
       var completeText = _$this.val();
       var insertText = (selectedText.indexOf(' ') !== -1 && selectedText.indexOf('"') === -1 ? '"' + selectedText + '"' : selectedText) + ' ';
       if (value.partial) {
         insertText = insertText.substr(0, insertText.length - 1);
+        if (insertText[insertText.length - 1] === '"') {
+          insertText = insertText.substr(0, insertText.length - 1);
+        }
       }
       var positionEnd = completeText.length;
       if (positionStart !== positionEnd) {
@@ -223,7 +245,7 @@
         }
       }
       var newText = completeText.substr(0, positionStart - current.text.length) + insertText + completeText.substr(positionEnd, completeText.length - positionEnd);
-      if (settings.select(current.idx, selectedText)) {
+      if (settings.select(current.idx, selectedText, current.match, newText)) {
         _$this.focus();
         _$this.val(newText);
         _$this.caret(positionEnd > positionStart ? positionEnd : positionStart + insertText.length);
@@ -234,7 +256,7 @@
 
     _$this.bind('focus', function () {
       window.setTimeout(function () {
-        _$display.show();
+        _handler({});
         _$this.trigger('keyup', {keyCode: 20});
       }, 100);
     });
@@ -247,10 +269,34 @@
       }
     });
 
-    _$this.bind(['keyup', 'drop', 'paste', 'click'].join(' '), _handler);
+    _$this.bind('keyup drop paste click', function (e) {
+      //paste means the text isn't there yet, so make this async
+      if (e.type === 'paste') {
+        window.setTimeout(function () {
+          _handler(e);
+        }, 1);
+      } else {
+        _handler(e);
+      }
+      _pos = _$this.caret();
+    });
     _$this.bind('keydown', function (e) {
-      if (e.keyCode === 9) {//tab
+      if (_values.length) {
+        if (e.keyCode === 13 || e.keyCode === 27 || e.keyCode === 38 || e.keyCode === 40) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      }
+    });
+
+    _$this.bind('keyup', function (e) {
+      if (e.keyCode === 13) {//enter
         e.preventDefault();
+        e.stopImmediatePropagation();
+      } else if (e.keyCode === 27) { // escape
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        _$display.hide();
       } else if (e.keyCode === 40) {//down
         e.preventDefault();
         _updateSelection(++_selected);
@@ -274,7 +320,7 @@
       },
       destroy: function () {
         _$display.remove();
-        _$this.unbind(['keyup', 'keydown', 'drop', 'paste', 'click', 'focus', 'focusout']);
+        _$this.unbind('keyup keydown drop paste click focus focusout');
       }
     };
 
